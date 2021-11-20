@@ -3,6 +3,8 @@ import random
 import math
 import numpy as np
 
+LEARNINGRATE = 0.01
+
 def GenerateDataSets():
     data_set = []
     with open('data_banknote_authentication.txt') as f:
@@ -13,8 +15,16 @@ def GenerateDataSets():
             file_line = f.readline()
             data_set.append(file_line.split(','))
             data_set[-1][-1] = data_set[-1][-1].rstrip('\n')
+        data_set.pop(-1)
         np.random.shuffle(data_set)
         chunk = int(len(data_set) / 3)
+    for i in range(len(data_set)):
+        for j in range(len(data_set[i])):
+            try:
+                data_set[i][j] = float(data_set[i][j])
+            except ValueError:
+                print("Failed to convert array entries from string to float")
+                exit(1)
     return data_set[0: chunk], data_set[chunk: 2 * chunk], data_set[2*chunk: len(data_set)]
 
 def Sigmoid(zValue):
@@ -65,10 +75,8 @@ def ForwardProp(network, row, SoT):
         for node in network[nnLayer]:
             newVal = 0
             # zVal = ZVector(node['weights'], val)
-            try:
-                zVal = ZVector(node, val)
-            except:
-                print(nnLayer)
+            zVal = ZVector(node, val)
+            #print(nnLayer)
             if SoT == "S":
                 newVal = Sigmoid(zVal)
             else:
@@ -80,29 +88,34 @@ def ForwardProp(network, row, SoT):
 def ZVector(weights, vals):
     activation = 0   
     for i in range(len(vals)):
-        activation += weights[i]*float(vals[i])  
+        activation += weights[i]*vals[i] 
     return activation
 
-def BackwardProp(nn, yVals, SoT):
-    for i in range(len(nn) - 1, 0, -1):
+def BackwardProp(nn, yVals, SoT, forwarPropVals):
+
+    for i in range(len(nn) - 1, 0, -1): #Start from output layer and work backwards
         curLayer = nn[i]
         errors = list()
-        if i == len(nn) - 1:
+        if i == len(nn) - 1:    #If this is the hidden layer, calculate the initial error
             for j in range(len(curLayer)):
                 neuron = curLayer[j]
-                errors.append(nn['output'] - yVals[j])
+                errors.append(forwarPropVals[j] - yVals[j]) #Error list will be from go output layer -> hidden layer (normal order)
+                if SoT == "S":
+                    weightChange = errors[j] * DSignmoid(neuron) #There will only be one instance where the loop reaches this part 
+                else:                                            #because there is only one neuron in the output layer (i = length of network -1)
+                    weightChange = errors[j] * DHyperbolic(neuron)
         else:
             for j in range(len(curLayer)):
                 error = 0
                 for neuron in nn[i+1]:
-                    error += (nn['weights'][j] * nn['delta'])
+                    error += (neuron[j] * weightChange)
                 errors.append(error)
         for k in range(len(curLayer)):
             neuron = curLayer[k]
             if SoT == "S":
-                neuron['deltaW'] = errors[k] * DSignmoid(neuron['output'])
+                weightChange = errors[k] * DSignmoid(neuron)
             else:
-                neuron['deltaW'] = errors[k] * DSignmoid(neuron['output'])
+                weightChange = errors[k] * DHyperbolic(neuron)
     pass
 
 def GetAccuracy():
@@ -125,7 +138,7 @@ if __name__ == "__main__":
             forwardPropOutput = list()
             for j in range(len(training) - 1):
                 forwardPropOutput.append(ForwardProp(nn, training[j], SoT))
-            print(forwardPropOutput)
+            #print(forwardPropOutput) # Will get the new list of values to use for the next layer of NN
             # accuracy = GetAccuracy()
             # if accuracy > maxAccuracy:
             #     maxAccuracy = accuracy
