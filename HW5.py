@@ -71,13 +71,6 @@ def InitializeNetwork(num_hidden, num_outputs): # Only need one output layer nod
     network['hidden'] = hidden
     network['output'] = output
 
-    # for row in network['hidden']:
-    #     print("hidden ", row)
-    # for row in network['output']:
-    #     print("output ", row)
-
-    # print(network['hidden'][1])
-
     return network
 
 def ForwardProp(network, row, SoT):
@@ -87,7 +80,6 @@ def ForwardProp(network, row, SoT):
         for node in network[nnLayer]:
             newVal = 0
             zVal = ZVector(node, val)
-            #print(nnLayer)
             if SoT == "S":
                 newVal = Sigmoid(zVal)
             else:
@@ -105,9 +97,8 @@ def ZVector(weights, vals):
 def BackwardProp(nn, yVal, SoT, forwarPropVals): #Should we only perform backward prop for a single instance? I think so.
 
     curLayer = nn['output'] #Only 2 layers, accessing the second layer (output) first
-    outputError = 0    #Weight for every neuron in hidden layer?
-                            #Error list will be from go output layer -> hidden layer (normal order)
-    # for k in range(len(curLayer)):
+    outputError = 0     #Weight for every neuron in hidden layer?
+                        #Error list will be from go output layer -> hidden layer (normal order)
     if SoT == "S":
         outputError = (forwarPropVals[-1] - yVal) * DSignmoid(forwarPropVals[-1]) #Calculate error on output layer to propagate to hidden layer
     else:                                            
@@ -119,7 +110,6 @@ def BackwardProp(nn, yVal, SoT, forwarPropVals): #Should we only perform backwar
         curNeuron = curLayer[j]
         error = 0
         for i in range(len(curNeuron)): #Iterate through each weight in neuron
-            # curNeuron[i] = errors[i] * outputError[j]
             error += ((curNeuron[i] * outputError)) #multiplying each weight by the error rate from previous layer to get error
         if SoT == "S":
             error = error * DSignmoid(forwarPropVals[j])
@@ -136,7 +126,7 @@ def UpdateWeights(network, outputError, hiddenErrors, data):
         curNeuron = curLayer[i]
         for j in range(len(curNeuron)-1):
             curNeuron[j] -= LEARNING_RATE * hiddenErrors[i] * data[j]
-    curNeuron[-1] = LEARNING_RATE * hiddenErrors[-1]
+    curNeuron[-1] = LEARNING_RATE * hiddenErrors[-1] #Bias weight updated here
     
     curLayer = network['output']
     for i in range(len(curLayer)):
@@ -147,10 +137,10 @@ def UpdateWeights(network, outputError, hiddenErrors, data):
     return
 
 
-def ValidateNetwork(nn, validation, validationExpected, SoT):
+def ValidateNetwork(nn, validation, SoT):
     output = 0
     accuracy = 0
-    if SoT == "S":
+    if SoT == "S": #Sigmoid function utilizes a 0 to 1 scale, while hyperbolic uses a -1 to 1 scale
         bound = 0.5
     else:
         bound = 0
@@ -166,7 +156,7 @@ def ValidateNetwork(nn, validation, validationExpected, SoT):
     accuracy = accuracy / len(validation)
     return accuracy
 
-def TestNetwork(nn, testing, testingExpected, SoT):
+def TestNetwork(nn, testing, SoT):
     output = 0
     accuracy = 0
     if SoT == "S":
@@ -203,37 +193,13 @@ if __name__ == "__main__":
             nn = {}
             nn = InitializeNetwork(i, 1)
 
-            # print("Inital Weights for the layer: ")
-            # for i in range(len(nn)):
-            #     print(f"Layer: ",i, ": " )
-            #     curLayer = nn['hidden']
-            #     if i > 0:
-            #         curLayer = nn['output']
-            #     for j in range(len(curLayer)):
-            #         print(curLayer[j])
-
-            # if(i == numHiddenNodes):
-            #     print(nn['hidden'][-1])
-
-            for k in range(20):
+            for k in range(20): #Performing multiple epochs on the same nn to generate the most accurate results
                 for j in range(len(training)):
                     forwardPropOutput.append(ForwardProp(nn, training[j], SoT))
                     outputError, hiddenErrors = BackwardProp(nn, trainingExpected[j], SoT, forwardPropOutput[j])
                     UpdateWeights(nn, outputError, hiddenErrors, training[j])
 
-            # if(i == numHiddenNodes):
-            #     print(forwardPropOutput[-1])
-
-            # print("Final Weights for hidden layer: ")
-            # for i in range(len(nn)):
-            #     print(f"Layer: ",i, ": " )
-            #     curLayer = nn['hidden']
-            #     if i > 0:
-            #         curLayer = nn['output']
-            #     for j in range(len(curLayer)):
-            #         print(curLayer[j])
-
-            curAccuracy = ValidateNetwork(nn, validation, validationExpected, SoT)
+            curAccuracy = ValidateNetwork(nn, validation, SoT)
 
             print(f"Accuracy for {i} hidden nodes: {curAccuracy}")
 
@@ -251,9 +217,9 @@ if __name__ == "__main__":
                 bestHiddenHyper = i
                 bestNNHyper = nn
 
-    testAccuracySig = TestNetwork(bestNNSig, testing, testingExpected, "S")
+    testAccuracySig = TestNetwork(bestNNSig, testing, "S")
     print(f"The optimum number of hidden nodes for sigmoid function is {bestHiddenSig}\n")
     print(f"Test accuracy for Sigmoid function: {testAccuracySig}")
-    testAccuracyHyper = TestNetwork(bestNNHyper, testing, testingExpected, "T")
+    testAccuracyHyper = TestNetwork(bestNNHyper, testing, "T")
     print(f"The optimum number of hidden nodes for hyperbolic function is {bestHiddenHyper}")
     print(f"Test accuracy for Hyperbolic function: {testAccuracyHyper}")
