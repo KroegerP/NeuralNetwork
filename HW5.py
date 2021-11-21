@@ -3,7 +3,7 @@ import random
 import math
 import numpy as np
 
-LEARNINGRATE = 0.01
+LEARNING_RATE = 0.01
 
 def GenerateDataSets():
     data_set = []
@@ -26,6 +26,18 @@ def GenerateDataSets():
                 print("Failed to convert array entries from string to float")
                 exit(1)
     return data_set[0: chunk], data_set[chunk: 2 * chunk], data_set[2*chunk: len(data_set)]
+
+def GetExpectedResults(training, validation, testing): #Getting expected results for error calcs
+    trainingExp = list()
+    validationExp = list()
+    testingExp = list()
+    for i in range(len(training)):
+        trainingExp.append(training[i][-1])
+    for i in range(len(validation)):
+        validationExp.append(validation[i][-1])
+    for i in range(len(training)):
+        testingExp.append(testing[i][-1])
+    return trainingExp, validationExp, testingExp
 
 def Sigmoid(zValue):
     return (1/(1+math.e**(-zValue)))
@@ -70,11 +82,10 @@ def InitializeNetwork(num_hidden, num_outputs): # Only need one output layer nod
 
 def ForwardProp(network, row, SoT):
     val = row
-    for nnLayer in network.keys():
-        new = []
+    new = []
+    for nnLayer in network.keys(): #Hidden and Output layers
         for node in network[nnLayer]:
             newVal = 0
-            # zVal = ZVector(node['weights'], val)
             zVal = ZVector(node, val)
             #print(nnLayer)
             if SoT == "S":
@@ -91,60 +102,158 @@ def ZVector(weights, vals):
         activation += weights[i]*vals[i] 
     return activation
 
-def BackwardProp(nn, yVals, SoT, forwarPropVals):
+def BackwardProp(nn, yVal, SoT, forwarPropVals): #Should we only perform backward prop for a single instance? I think so.
 
-    for i in range(len(nn) - 1, 0, -1): #Start from output layer and work backwards
-        curLayer = nn[i]
-        errors = list()
-        if i == len(nn) - 1:    #If this is the hidden layer, calculate the initial error
-            for j in range(len(curLayer)):
-                neuron = curLayer[j]
-                errors.append(forwarPropVals[j] - yVals[j]) #Error list will be from go output layer -> hidden layer (normal order)
-                if SoT == "S":
-                    weightChange = errors[j] * DSignmoid(neuron) #There will only be one instance where the loop reaches this part 
-                else:                                            #because there is only one neuron in the output layer (i = length of network -1)
-                    weightChange = errors[j] * DHyperbolic(neuron)
+    curLayer = nn['output'] #Only 2 layers, accessing the second layer (output) first
+    outputError = 0    #Weight for every neuron in hidden layer?
+                            #Error list will be from go output layer -> hidden layer (normal order)
+    # for k in range(len(curLayer)):
+    if SoT == "S":
+        outputError = (forwarPropVals[-1] - yVal) * DSignmoid(forwarPropVals[-1]) #Calculate error on output layer to propagate to hidden layer
+    else:                                            
+        outputError = (forwarPropVals[-1] - yVal) * DHyperbolic(forwarPropVals[-1]) #Error = (a-y)*da, da is the derivative of the squish function
+
+    curLayer = nn['hidden']
+    hiddenErrors = list()
+    for j in range(len(curLayer)): #Iterate through each neuron in hidden layer
+        curNeuron = curLayer[j]
+        error = 0
+        for i in range(len(curNeuron)): #Iterate through each weight in neuron
+            # curNeuron[i] = errors[i] * outputError[j]
+            error += ((curNeuron[i] * outputError)) #multiplying each weight by the error rate from previous layer to get error
+        if SoT == "S":
+            error = error * DSignmoid(forwarPropVals[j])
+        else:                                            
+            error = error * DHyperbolic(forwarPropVals[j])
+        
+        hiddenErrors.append(error)
+
+    return outputError, hiddenErrors
+
+def UpdateWeights(network, outputError, hiddenErrors, data):
+    curLayer = network['hidden']
+    for i in range(len(curLayer)):
+        curNeuron = curLayer[i]
+        for j in range(len(curNeuron)-1):
+            curNeuron[j] -= LEARNING_RATE * hiddenErrors[i] * data[j]
+    curNeuron[-1] = LEARNING_RATE * hiddenErrors[-1]
+    
+    curLayer = network['output']
+    for i in range(len(curLayer)):
+        curNeuron = curLayer[i]
+        for j in range(len(curNeuron)):
+            curNeuron[j] -= LEARNING_RATE * outputError
+
+    return
+
+
+def ValidateNetwork(nn, validation, validationExpected, SoT):
+    output = 0
+    accuracy = 0
+    if SoT == "S":
+        bound = 0.5
+    else:
+        bound = 0
+    for i in range(len(validation)):
+        fullOutput = ForwardProp(nn, validation[i], SoT)
+        output = fullOutput[-1]
+        if output > bound:
+            output = 1
         else:
-            for j in range(len(curLayer)):
-                error = 0
-                for neuron in nn[i+1]:
-                    error += (neuron[j] * weightChange)
-                errors.append(error)
-        for k in range(len(curLayer)):
-            neuron = curLayer[k]
-            if SoT == "S":
-                weightChange = errors[k] * DSignmoid(neuron)
-            else:
-                weightChange = errors[k] * DHyperbolic(neuron)
-    pass
+            output = 0
+        if(output == validation[i][-1]):
+            accuracy += 1
+    accuracy = accuracy / len(validation)
+    return accuracy
 
-def GetAccuracy():
-    # use MSE on neurons to determine total error for accuracy
-    pass
+def TestNetwork(nn, testing, testingExpected, SoT):
+    output = 0
+    accuracy = 0
+    if SoT == "S":
+        bound = 0.5
+    else:
+        bound = 0
+    for i in range(len(testing)):
+        fullOutput = ForwardProp(nn, testing[i], SoT)
+        output = fullOutput[-1]
+        if output > bound:
+            output = 1
+        else:
+            output = 0
+        if(output == testing[i][-1]):
+            accuracy += 1
+    accuracy = accuracy / len(testing)
+    return accuracy
 
 if __name__ == "__main__":
     training, validation, testing = GenerateDataSets()
-    # print(training[0])
-    # print(len(training))
-    numHiddenNodes = len(training[-1]) # Number of input nodes
+    trainingExpected, validationExpected, testingExpected = GetExpectedResults(training, validation, testing)
+    numHiddenNodes = len(training[-1]) - 1 # Number of input nodes
     optimumHiddenNodes, maxAccuracy = -1, -1
+    oldAccuracySig, oldAccuracyHyper = -1, -1
     for k in range(2):
-        SoT = "S"
         if k == 1:
             SoT = "T"
+            print(f"Hyperbolic Squash Function: ")
+        else:
+            SoT = "S"
+            print(f"Sigmoid Squash Function: ")
         for i in range(numHiddenNodes, 0, -1):
+            forwardPropOutput = list()
             nn = {}
             nn = InitializeNetwork(i, 1)
-            forwardPropOutput = list()
-            for j in range(len(training) - 1):
-                forwardPropOutput.append(ForwardProp(nn, training[j], SoT))
-            #print(forwardPropOutput) # Will get the new list of values to use for the next layer of NN
-            # accuracy = GetAccuracy()
-            # if accuracy > maxAccuracy:
-            #     maxAccuracy = accuracy
-            #     optimumHiddenNodes = i
-        
-    print(f"The optimum number of hidden nodes for sigmoid function is {optimumHiddenNodes}")
-        #outputs
-    exit(0)
-    pass
+
+            # print("Inital Weights for the layer: ")
+            # for i in range(len(nn)):
+            #     print(f"Layer: ",i, ": " )
+            #     curLayer = nn['hidden']
+            #     if i > 0:
+            #         curLayer = nn['output']
+            #     for j in range(len(curLayer)):
+            #         print(curLayer[j])
+
+            # if(i == numHiddenNodes):
+            #     print(nn['hidden'][-1])
+
+            for k in range(20):
+                for j in range(len(training)):
+                    forwardPropOutput.append(ForwardProp(nn, training[j], SoT))
+                    outputError, hiddenErrors = BackwardProp(nn, trainingExpected[j], SoT, forwardPropOutput[j])
+                    UpdateWeights(nn, outputError, hiddenErrors, training[j])
+
+            # if(i == numHiddenNodes):
+            #     print(forwardPropOutput[-1])
+
+            # print("Final Weights for hidden layer: ")
+            # for i in range(len(nn)):
+            #     print(f"Layer: ",i, ": " )
+            #     curLayer = nn['hidden']
+            #     if i > 0:
+            #         curLayer = nn['output']
+            #     for j in range(len(curLayer)):
+            #         print(curLayer[j])
+
+            curAccuracy = ValidateNetwork(nn, validation, validationExpected, SoT)
+
+            print(f"Accuracy for {i} hidden nodes: {curAccuracy}")
+
+            # hiddenLayer = nn['hidden']
+            # for w in range(len(hiddenLayer)):
+            #     print(hiddenLayer[w])
+            # print(nn['output'][-1])
+            
+            if curAccuracy >= oldAccuracySig and SoT == "S": #Save the best nn size
+                oldAccuracySig = curAccuracy
+                bestHiddenSig = i
+                bestNNSig = nn
+            if curAccuracy >= oldAccuracyHyper and SoT == "T": #Save the best nn size
+                oldAccuracyHyper = curAccuracy
+                bestHiddenHyper = i
+                bestNNHyper = nn
+
+    testAccuracySig = TestNetwork(bestNNSig, testing, testingExpected, "S")
+    print(f"The optimum number of hidden nodes for sigmoid function is {bestHiddenSig}\n")
+    print(f"Test accuracy for Sigmoid function: {testAccuracySig}")
+    testAccuracyHyper = TestNetwork(bestNNHyper, testing, testingExpected, "T")
+    print(f"The optimum number of hidden nodes for hyperbolic function is {bestHiddenHyper}")
+    print(f"Test accuracy for Hyperbolic function: {testAccuracyHyper}")
